@@ -99,18 +99,28 @@ def Metropolis_Hastings_Sampling_posterior_srjk(s_ljk, s_rjk, nj, beta, w, sum):
     return vec[-1]
 
 
-def beta_posterior_distribution(beta, w, s_l, M, k):
-    product_sequence = [(mpmath.power(s_l[j][k]*w[k], 0.5*beta) * mpmath.exp(-0.5*s_l[j][k]*beta*w[k]))
+# def beta_posterior_distribution(beta, w, s_l, M, k):
+#     product_sequence = [(np.power(s_l[j][k]*w[k], 0.5*beta) * np.exp(-0.5*s_l[j][k]*beta*w[k]))
+#                         for j in range(M)][0]
+#     return mpmath.power(special.gamma(0.5*beta), -M) \
+#         * mpmath.exp(- 0.5/beta)\
+#         * mpmath.power(0.5*beta, 0.5*(M*beta-3))\
+#         * product_sequence
+
+
+def compare_beta(beta, previous_beta, w, s, M, k):
+    first_component = np.power(special.gamma(0.5*beta), -M) / np.power(special.gamma(0.5*previous_beta), -M)
+    second_component = np.exp(- 0.5/beta) / np.exp(- 0.5/previous_beta)
+    third_component = np.power(0.5*beta, 0.5*(M*beta-3)) / np.power(0.5*previous_beta, 0.5*(M*previous_beta-3))
+    current_product_sequence = [(np.power(s[j][k]*w[k], 0.5*beta) * np.exp(-0.5*s[j][k]*beta*w[k]))
                         for j in range(M)][0]
-    return mpmath.power(special.gamma(0.5*beta), -M) \
-        * mpmath.exp(- 0.5/beta)\
-        * mpmath.power(0.5*beta, 0.5*(M*beta-3))\
-        * product_sequence
+    previous_product_sequence = [(np.power(s[j][k]*w[k], 0.5*previous_beta) * np.exp(-0.5*s[j][k]*previous_beta*w[k]))
+                        for j in range(M)][0]
+    fourth_component = current_product_sequence / previous_product_sequence
+    return first_component * second_component * third_component * fourth_component
 
 
-
-
-def Metropolis_Hastings_Sampling_beta(beta, w, s_l, M, k):
+def Metropolis_Hastings_Sampling_beta(beta, w, s, M, k):
     n = 100
     x = beta
     vec = []
@@ -123,9 +133,9 @@ def Metropolis_Hastings_Sampling_beta(beta, w, s_l, M, k):
         if candidate <= 0:
             candidate = np.abs(candidate)
         # acceptance probability
-        # alpha = min([1., compare_s_rjk(candidate, x, s_ljk, nj, beta, w, sum)])
-        alpha = min([1., beta_posterior_distribution(candidate, w, s_l, M, k)/
-                     beta_posterior_distribution(x, w, s_l, M, k )])
+        alpha = min([1., compare_beta(candidate, x, w, s, M, k)])
+        # alpha = min([1., beta_posterior_distribution(candidate, w, s_l, M, k)/
+        #              beta_posterior_distribution(x, w, s_l, M, k )])
         u = np.random.uniform(0,1)
         if u < alpha:
             x = candidate
@@ -133,20 +143,32 @@ def Metropolis_Hastings_Sampling_beta(beta, w, s_l, M, k):
     return vec[-1]
 
 
-def Asymmetric_Gassian_Distribution(xik, mu_jk, s_ljk, s_rjk):
-    # if xik < mu_jk:
-    #     print( mpmath.sqrt(2/mpmath.pi)/(mpmath.power(s_ljk, -0.5) + mpmath.power(s_rjk, -0.5))\
-    #            * mpmath.exp(- 0.5 * s_ljk * (xik- mu_jk)**2))
-    # else:
-    #     print( mpmath.sqrt(2/mpmath.pi)/(mpmath.power(s_ljk, -0.5) + mpmath.power(s_rjk, -0.5))\
-    #            * mpmath.exp(- 0.5 * s_rjk * (xik- mu_jk)**2))
-    if xik < mu_jk:
-        return mpmath.sqrt(2/mpmath.pi)/(mpmath.power(s_ljk, -0.5) + mpmath.power(s_rjk, -0.5))\
-               * mpmath.exp(- 0.5 * s_ljk * (xik- mu_jk)**2)
-    else:
-        return mpmath.sqrt(2/mpmath.pi)/(mpmath.power(s_ljk, -0.5) + mpmath.power(s_rjk, -0.5))\
-               * mpmath.exp(- 0.5 * s_rjk * (xik- mu_jk)**2)
+# def Asymmetric_Gassian_Distribution(xik, mu_jk, s_ljk, s_rjk):
+#     if xik < mu_jk:
+#         return mpmath.sqrt(2/mpmath.pi)/(mpmath.power(s_ljk, -0.5) + mpmath.power(s_rjk, -0.5))\
+#                * mpmath.exp(- 0.5 * s_ljk * (xik- mu_jk)**2)
+#     else:
+#         return mpmath.sqrt(2/mpmath.pi)/(mpmath.power(s_ljk, -0.5) + mpmath.power(s_rjk, -0.5))\
+#                * mpmath.exp(- 0.5 * s_rjk * (xik- mu_jk)**2)
 
+
+def compare_agd(xik, previous_xik, mu_jk, s_ljk, s_rjk):
+    current_y = 0
+    previous_y = 0
+    if xik < mu_jk:
+        current_y = np.sqrt(2/np.pi)/(np.power(s_ljk, -0.5) + np.power(s_rjk, -0.5))\
+               * np.exp(- 0.5 * s_ljk * (xik- mu_jk)**2)
+    else:
+        current_y =  np.sqrt(2/np.pi)/(np.power(s_ljk, -0.5) + np.power(s_rjk, -0.5))\
+               * np.exp(- 0.5 * s_rjk * (xik- mu_jk)**2)
+
+    if previous_xik < mu_jk:
+        previous_y = np.sqrt(2/np.pi)/(np.power(s_ljk, -0.5) + np.power(s_rjk, -0.5))\
+               * np.exp(- 0.5 * s_ljk * (previous_xik- mu_jk)**2)
+    else:
+        previous_y =  np.sqrt(2/np.pi)/(np.power(s_ljk, -0.5) + np.power(s_rjk, -0.5))\
+               * np.exp(- 0.5 * s_rjk * (previous_xik- mu_jk)**2)
+    return current_y / previous_y
 
 
 def Metropolis_Hastings_Sampling_AGD(mu_jk, s_ljk, s_rjk, size, n=10000):
@@ -160,8 +182,9 @@ def Metropolis_Hastings_Sampling_AGD(mu_jk, s_ljk, s_rjk, size, n=10000):
         # the parameter is mu: the previous state of x and variation
         candidate = norm.rvs(x, 3, 1)[0]
         # acceptance probability
-        alpha = min([1., Asymmetric_Gassian_Distribution(candidate, mu_jk, s_ljk, s_rjk) /
-                     Asymmetric_Gassian_Distribution(x, mu_jk, s_ljk, s_rjk)])
+        alpha = min([1., compare_agd(candidate, x,  mu_jk, s_ljk, s_rjk)])
+        # alpha = min([1., Asymmetric_Gassian_Distribution(candidate, mu_jk, s_ljk, s_rjk) /
+        #              Asymmetric_Gassian_Distribution(x, mu_jk, s_ljk, s_rjk)])
         u = np.random.uniform(0, 1)
 
         if u < alpha:
