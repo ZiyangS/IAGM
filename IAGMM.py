@@ -92,15 +92,14 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
     # initially, there is only one component, j=1, so the index will set to 0
     s_l[0, :] = np.array([np.squeeze(draw_gamma(beta_l[k]/2, 2/(beta_l[k]*w_l[k]))) for k in range(D)])
     s_r[0, :] = np.array([np.squeeze(draw_gamma(beta_r[k]/2, 2/(beta_r[k]*w_r[k]))) for k in range(D)])
-    print(s_l)
-    time.sleep(100)
 
     # initially, all samples are in the only component
     n[0] = N
 
     # draw lambda from prior
     # lambda is subject to Guassian(muy, vary), eq 3 (Rasmussen 2000)
-    lam = np.array([np.squeeze(draw_normal(muy[k], vary[k])) for k in range(D)])
+    # lam = np.array([np.squeeze(draw_normal(muy[k], vary[k])) for k in range(D)])
+    lam = draw_MVNormal(mean=muy, cov=vary)
 
     # draw r from prior
     # precision r is subject to gamma(1, (vary)^(-1)), eq 3 (Rasmussen 2000)
