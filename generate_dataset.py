@@ -6,20 +6,20 @@ import matplotlib.pyplot as plt
 from scipy.stats import multivariate_normal as mv_norm
 
 
-mean_component_1 = [0, 5]
+mean_component_1 = [0, 10]
 cov_component_1 = [[1, 0], [0, 1]]  # diagonal covariance
 # data = multivariate_normal(mean=mean, cov=cov, size=1000)
 data_component_1 = mv_norm.rvs(mean=mean_component_1, cov=cov_component_1, size=250)
 
-mean_component_2 = [0, -5]
+mean_component_2 = [0, -10]
 cov_component_2 = [[1 , 0], [0, 1]]  # diagonal covariance
 data_component_2 = mv_norm.rvs(mean=mean_component_2, cov=cov_component_2, size=250)
 
-mean_component_3 = [5, 0]
+mean_component_3 = [10, 0]
 cov_component_3 = [[1 , 0], [0, 1]]  # diagonal covariance
 data_component_3 = mv_norm.rvs(mean=mean_component_3, cov=cov_component_3, size=250)
 
-mean_component_4 = [-5, 0]
+mean_component_4 = [-10, 0]
 cov_component_4 = [[1 , 0], [0, 1]]  # diagonal covariance
 data_component_4 = mv_norm.rvs(mean=mean_component_4, cov=cov_component_4, size=250)
 

@@ -15,7 +15,7 @@ def parser():
     # arguments for reading in a data file
     parser.add_argument('-i', '--inputfile', type=str, default=None, help='the input file name')
     # arguments for sampling number
-    parser.add_argument('-n', '--Nsamples', type=int, default=2000, help='the number of gibbs samples to produce')
+    parser.add_argument('-n', '--Nsamples', type=int, default=1000, help='the number of gibbs samples to produce')
     # general analysis parameters
     parser.add_argument('-I', '--Nint', type=int, default=50, help='the number of samples used in approximating the tricky integral')
     parser.add_argument('-a', '--anneal', action='count', default=0, help='perform simulated annealing')

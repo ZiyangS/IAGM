@@ -1,6 +1,6 @@
 import sys
 import numpy as np
-from scipy.stats import gamma, wishart, norm
+from scipy.stats import gamma, invgamma, wishart, norm
 from scipy.stats import multivariate_normal as mv_norm
 from numpy.linalg import inv, det, slogdet
 from scipy import special
@@ -113,10 +113,16 @@ def compare_beta(beta, previous_beta, w, s, M, k):
     second_component = np.exp(- 0.5/beta) / np.exp(- 0.5/previous_beta)
     third_component = np.power(0.5*beta, 0.5*(M*beta-3)) / np.power(0.5*previous_beta, 0.5*(M*previous_beta-3))
     current_product_sequence = [(np.power(s[j][k]*w[k], 0.5*beta) * np.exp(-0.5*s[j][k]*beta*w[k]))
-                        for j in range(M)][0]
+                        for j in range(M)]
     previous_product_sequence = [(np.power(s[j][k]*w[k], 0.5*previous_beta) * np.exp(-0.5*s[j][k]*previous_beta*w[k]))
-                        for j in range(M)][0]
-    fourth_component = current_product_sequence / previous_product_sequence
+                        for j in range(M)]
+    fourth_component = 1
+    print(current_product_sequence)
+    print(previous_product_sequence)
+    for j in range(M):
+        fourth_component *= current_product_sequence[j] / previous_product_sequence[j]
+    print(fourth_component)
+    print(111)
     return first_component * second_component * third_component * fourth_component
 
 
@@ -168,6 +174,7 @@ def compare_agd(xik, previous_xik, mu_jk, s_ljk, s_rjk):
     else:
         previous_y =  np.sqrt(2/np.pi)/(np.power(s_ljk, -0.5) + np.power(s_rjk, -0.5))\
                * np.exp(- 0.5 * s_rjk * (previous_xik- mu_jk)**2)
+    # print(previous_y)
     return current_y / previous_y
 
 
@@ -192,7 +199,6 @@ def Metropolis_Hastings_Sampling_AGD(mu_jk, s_ljk, s_rjk, size, n=10000):
             vec.append(x)
         # the sample results is enough
         if len(vec) >= (size+500):
-            print(i)
             break
     return vec[-size:]
 
@@ -211,16 +217,24 @@ def integral_approx(X, lam, r, beta_l, beta_r, w_l, w_r, G=1, size=1):
         s_l = np.array([np.squeeze(draw_gamma(beta_l[k] / 2, 2 / (beta_l[k] * w_l[k]))) for k in range(D)])
         s_r = np.array([np.squeeze(draw_gamma(beta_r[k] / 2, 2 / (beta_r[k] * w_r[k]))) for k in range(D)])
         ini = np.ones(len(X))
+        # print(000)
+        # print(mu)
+        # print(s_l)
+        # print(s_r)
         for k in range(D):
             # use metropolis-hastings algorithm to draw sampling from AGD
             # the size parameter is the required sampling number which is equal to the dataset's number
             # the n parameter is MH algorithm itering times,because the acceptance rate should be 25%-40%
-            test = Metropolis_Hastings_Sampling_AGD(mu[k], s_l[k], s_r[k], size=N, n=N*50)
-            # print(test)
-            ini *= test
-
+            temp_para = Metropolis_Hastings_Sampling_AGD(mu[k], s_l[k], s_r[k], size=N, n=N*100)
+            # print(temp_para[0])
+            ini *= temp_para
         temp += ini
         i += 1
+        # print(111)
+    # print("start")
+    # print(temp)
+    # print( temp/float(size))
+    # print("finish")
     return temp/float(size)
 
 
@@ -266,55 +280,30 @@ def log_p_s_rjk_prime(s_rjk, s_ljk,  w, beta, N, cumculative_sum_equation):
         - 0.5*w*beta
 
 
-def log_p_beta_full_cov(beta,k=1,s=1,w=1,D=1,logdet_w=1,cumculative_sum_equation=1):
-    """
-    The log of the second part of eq 9 (Rasmussen 2000)
-    the covariance matrix of the model is full cov
-    """
-    return -1.5*np.log(beta - D + 1.0) \
-        - 0.5*D/(beta - D + 1.0) \
-        + 0.5*beta*k*D*np.log(0.5*beta) \
-        + 0.5*beta*k*logdet_w \
-        + 0.5*beta*cumculative_sum_equation \
-        - k*special.multigammaln(0.5*beta, D)
-
-def log_p_beta_prime_full_cov(beta,k=1,s=1,w=1,D=1,logdet_w=1,cumculative_sum_equation=1):
-    """
-    The derivative (wrt beta) of the log of eq 9 (Rasmussen 2000)
-    the covariance matrix of the model is full cov
-    """
-    psi = 0.0
-    for j in range(1,D+1):
-        psi += special.psi(0.5*beta + 0.5*(1.0 - j))
-    return -1.5/(beta - D + 1.0) \
-        + 0.5*D/(beta - D + 1.0)**2 \
-        + 0.5*k*D*(1.0 + np.log(0.5*beta)) \
-        + 0.5*k*logdet_w \
-        + 0.5*cumculative_sum_equation \
-        - 0.5*k*psi
-
-def log_p_beta_diagonal_cov(beta,k=1,w=1,D=1,cumculative_sum_equation=1):
-    """
-    The log of the second part of eq 9 (Rasmussen 2000)
-    the covariance matrix of the model is diagonal cov
-    """
-    return -k*special.gammaln(beta/2) \
+def log_p_beta(beta, M, k,cumculative_sum_equation=1):
+    return -M*special.gammaln(beta/2) \
         - 0.5/beta \
-        + 0.5*(beta*k-3)*np.log(beta/2) \
+        + 0.5*(beta*M-3)*np.log(beta/2) \
         + 0.5*beta*cumculative_sum_equation
 
-
-def log_p_beta_prime_diagonal_cov(beta,k=1,w=1,D=1,cumculative_sum_equation=1):
-    """
-    The derivative (wrt beta) of the log of eq 9 (Rasmussen 2000)
-    the covariance matrix of the model is diagonal cov
-    """
-    return -k*special.psi(0.5*beta) \
+def log_p_beta_prime(beta, M, k,cumculative_sum_equation=1):
+    return -M*special.psi(0.5*beta) \
         + 0.5/beta**2 \
-        + 0.5*k*np.log(0.5*beta) \
-        + (k*beta -3)/beta \
+        + 0.5*M*np.log(0.5*beta) \
+        + (M*beta -3)/beta \
         + 0.5*cumculative_sum_equation
 
+def draw_beta_ars(w, s, M, k, size=1):
+    D = 2
+    cumculative_sum_equation = 0
+    for sj in s:
+        cumculative_sum_equation += np.log(sj[k])
+        cumculative_sum_equation += np.log(w[k])
+        cumculative_sum_equation -= w[k]*sj[k]
+    lb = D
+    ars = ARS(log_p_beta, log_p_beta_prime, xi=[lb + 15], lb=lb, ub=float("inf"), \
+             M=M, k=k, cumculative_sum_equation=cumculative_sum_equation)
+    return ars.draw(size)
 
 # def draw_gamma_ras(a, theta, size=1):
 #     """
@@ -329,6 +318,11 @@ def draw_gamma(a, theta, size=1):
     """
     return gamma.rvs(a, loc=0, scale=theta, size=size)
 
+def draw_invgamma(a, theta, size=1):
+    """
+    returns inverse Gamma distributed samples
+    """
+    return invgamma.rvs(a, loc=0, scale=theta, size=size)
 
 def draw_wishart(df, scale, size=1):
     """
@@ -371,7 +365,6 @@ def draw_s_rjk(s_ljk, w, beta, N, cumculative_sum_equation, size=1):
     ars = ARS(log_p_s_rjk, log_p_s_rjk_prime, xi=[lb+5], lb=0, ub=lb+10, s_ljk=s_ljk,
                   w=w, beta=beta, N=N, cumculative_sum_equation=cumculative_sum_equation)
     return ars.draw(size)
-
 
 
 def draw_beta(beta, w, s_l, M, k, size=1):
