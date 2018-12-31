@@ -33,7 +33,7 @@ def compare_s_ljk(s_ljk, previous_s_ljk, s_rjk, nj, beta, w, sum):
 
 
 def Metropolis_Hastings_Sampling_posterior_sljk(s_ljk, s_rjk, nj, beta, w, sum):
-    n = 100
+    n = 5000
     x = s_ljk
     vec = []
     vec.append(x)
@@ -77,7 +77,7 @@ def compare_s_rjk(s_rjk, previous_s_rjk, s_ljk, nj, beta, w, sum):
 
 
 def Metropolis_Hastings_Sampling_posterior_srjk(s_ljk, s_rjk, nj, beta, w, sum):
-    n = 100
+    n = 5000
     x = s_rjk
     vec = []
     vec.append(x)
@@ -117,12 +117,8 @@ def compare_beta(beta, previous_beta, w, s, M, k):
     previous_product_sequence = [(np.power(s[j][k]*w[k], 0.5*previous_beta) * np.exp(-0.5*s[j][k]*previous_beta*w[k]))
                         for j in range(M)]
     fourth_component = 1
-    print(current_product_sequence)
-    print(previous_product_sequence)
     for j in range(M):
         fourth_component *= current_product_sequence[j] / previous_product_sequence[j]
-    print(fourth_component)
-    print(111)
     return first_component * second_component * third_component * fourth_component
 
 
@@ -149,13 +145,16 @@ def Metropolis_Hastings_Sampling_beta(beta, w, s, M, k):
     return vec[-1]
 
 
-# def Asymmetric_Gassian_Distribution(xik, mu_jk, s_ljk, s_rjk):
-#     if xik < mu_jk:
-#         return mpmath.sqrt(2/mpmath.pi)/(mpmath.power(s_ljk, -0.5) + mpmath.power(s_rjk, -0.5))\
-#                * mpmath.exp(- 0.5 * s_ljk * (xik- mu_jk)**2)
-#     else:
-#         return mpmath.sqrt(2/mpmath.pi)/(mpmath.power(s_ljk, -0.5) + mpmath.power(s_rjk, -0.5))\
-#                * mpmath.exp(- 0.5 * s_rjk * (xik- mu_jk)**2)
+def Asymmetric_Gassian_Distribution_pdf(x_k, mu_jk, s_ljk, s_rjk):
+    y_k = np.zeros(x_k.shape[0])
+    for i, xik in enumerate(x_k):
+        if xik < mu_jk:
+            y_k[i] = mpmath.sqrt(2/mpmath.pi)/(mpmath.power(s_ljk, -0.5) + mpmath.power(s_rjk, -0.5))\
+                   * mpmath.exp(- 0.5 * s_ljk * (xik- mu_jk)**2)
+        else:
+            y_k[i] = mpmath.sqrt(2/mpmath.pi)/(mpmath.power(s_ljk, -0.5) + mpmath.power(s_rjk, -0.5))\
+                   * mpmath.exp(- 0.5 * s_rjk * (xik- mu_jk)**2)
+    return y_k
 
 
 def compare_agd(xik, previous_xik, mu_jk, s_ljk, s_rjk):
@@ -174,7 +173,6 @@ def compare_agd(xik, previous_xik, mu_jk, s_ljk, s_rjk):
     else:
         previous_y =  np.sqrt(2/np.pi)/(np.power(s_ljk, -0.5) + np.power(s_rjk, -0.5))\
                * np.exp(- 0.5 * s_rjk * (previous_xik- mu_jk)**2)
-    # print(previous_y)
     return current_y / previous_y
 
 
@@ -183,7 +181,7 @@ def Metropolis_Hastings_Sampling_AGD(mu_jk, s_ljk, s_rjk, size, n=10000):
     vec = []
     vec.append(x)
     for i in range(n):
-        # print(i)
+
         # proposed distribution make sure 25%-40% accept
         # random_walk algorithm, using symmetric Gaussian distribution, so it's simplified to Metropolis algoritm
         # the parameter is mu: the previous state of x and variation
@@ -203,38 +201,28 @@ def Metropolis_Hastings_Sampling_AGD(mu_jk, s_ljk, s_rjk, size, n=10000):
     return vec[-size:]
 
 
-def integral_approx(X, lam, r, beta_l, beta_r, w_l, w_r, G=1, size=1):
+def integral_approx(X, lam, r, beta_l, beta_r, w_l, w_r, G=1, size=10):
     """
     estimates the integral, eq 17 (Rasmussen 2000)
     """
-    size = 1
+    size = 10
     N, D = X.shape
     temp = np.zeros(len(X))
     i = 0
     while i < size:
-        # print(i)
         mu = np.array([np.squeeze(norm.rvs(loc=lam[k], scale=1/r[k], size=1)) for k in range(D)])
+        # mu = draw_MVNormal(mean=lam, cov=1/r)
         s_l = np.array([np.squeeze(draw_gamma(beta_l[k] / 2, 2 / (beta_l[k] * w_l[k]))) for k in range(D)])
         s_r = np.array([np.squeeze(draw_gamma(beta_r[k] / 2, 2 / (beta_r[k] * w_r[k]))) for k in range(D)])
         ini = np.ones(len(X))
-        # print(000)
-        # print(mu)
-        # print(s_l)
-        # print(s_r)
         for k in range(D):
             # use metropolis-hastings algorithm to draw sampling from AGD
             # the size parameter is the required sampling number which is equal to the dataset's number
             # the n parameter is MH algorithm itering times,because the acceptance rate should be 25%-40%
-            temp_para = Metropolis_Hastings_Sampling_AGD(mu[k], s_l[k], s_r[k], size=N, n=N*100)
-            # print(temp_para[0])
+            temp_para = Asymmetric_Gassian_Distribution_pdf(X[:, k], mu[k], s_l[k], s_r[k])
             ini *= temp_para
         temp += ini
         i += 1
-        # print(111)
-    # print("start")
-    # print(temp)
-    # print( temp/float(size))
-    # print("finish")
     return temp/float(size)
 
 
