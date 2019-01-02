@@ -52,8 +52,8 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
     N, D = X.shape
     muy = np.mean(X, axis=0)
     vary = np.zeros(D)
-    for i in range(D):
-        vary[i] = np.var(X[:, i])
+    for k in range(D):
+        vary[k] = np.var(X[:, k])
 
     # initialise a single sample
     Samp = Samples(Nsamples, D)
@@ -77,8 +77,6 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
     # theta parameter change to mean, theta*(1/alpha). So second parameter of Rasmussen's should be 2*theta/a
     beta_l = np.array([np.squeeze(draw_invgamma(0.5, 2)) for d in range(D)])
     beta_r = np.array([np.squeeze(draw_invgamma(0.5, 2)) for d in range(D)])
-    # beta_l = np.array([np.squeeze(draw_gamma(0.5, 2)) for d in range(D)])
-    # beta_r = np.array([np.squeeze(draw_gamma(0.5, 2)) for d in range(D)])
 
     # draw w from prior
     # w is subject ot Rasmussen's gamma(1, vary) , eq 7 (Rasmussen 2000)
@@ -90,6 +88,7 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
     # S_ljk, S_rjk is subject to gamma(beta, (w)^(-1)), eq 8 (Rasmussen 2006)
     # which means its subject to standard gamma(0.5*beta, 2/(beta*w))
     # initially, there is only one component, j=1, so the index will set to 0
+
     s_l[0, :] = np.array([np.squeeze(draw_gamma(beta_l[k]/2, 2/(beta_l[k]*w_l[k]))) for k in range(D)])
     s_r[0, :] = np.array([np.squeeze(draw_gamma(beta_r[k]/2, 2/(beta_r[k]*w_r[k]))) for k in range(D)])
 
@@ -137,6 +136,8 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
         Xj = [X[np.where(c==j), :] for j, nj in enumerate(n)][0]
         mu_cache = mu
         mu = np.zeros((M, D))
+        mu_test = np.zeros(D)
+        r_test = np.zeros(D)
         j = 0
         # draw muj from posterior (depends on sj, c, lambda, r), eq 4 (Rasmussen 2000)
         for x, nj, s_lj, s_rj in zip(Xj, n, s_l, s_r):
@@ -146,22 +147,32 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
                 # p represent the number of x_ik < mu_jk
                 p = x_k[x_k < mu_cache[j][k]].shape[0]
                 # q represent the number of x_ik >= mu_jk, q = n - p
-                q = nj - p
+                q = x_k[x_k >= mu_cache[j][k]].shape[0]
                 # x_l_sum represents the sum from i to n of x_ik, which x_ik < mu_jk
                 x_l_sum = np.sum(x_k[x_k < mu_cache[j][k]])
                 # x_r_sum represents the sum from i to n of x_ik, which x_ik >= mu_jk
                 x_r_sum = np.sum(x_k[x_k >= mu_cache[j][k]])
+                s_lj[k] = s_rj[k]
+
                 r_n = r[k] + p * s_lj[k] + q * s_rj[k]
                 mu_n = (s_lj[k] * x_l_sum + s_rj[k] * x_r_sum + r[k] * lam[k])/r_n
                 mu[j, k] = norm.rvs(mu_n, 1/r_n)
+                mu_test[k] = mu_n
+                r_test[k] =  r_n
             j += 1
+        print(mu)
 
         # draw lambda from posterior (depends on mu, M, and r), eq 5 (Rasmussen 2000)
         mu_sum = np.sum(mu, axis=0)
+        loc_n = np.zeros(D)
+        scale_n = np.zeros(D)
         for k in range(D):
             scale = 1/(precisiony[k] + M * r[k])
+            scale_n[k] = scale
             loc = scale * (muy[k]*precisiony[k] + r[k]* mu_sum[k])
+            loc_n[k] = loc
             lam[k] = draw_normal(loc=loc, scale=scale)
+        lam = draw_MVNormal(loc_n, scale_n)
 
         # draw r from posterior (depnds on M, mu, and lambda), eq 5 (Rasmussen 2000)
         temp_para_sum = np.zeros(D)
@@ -180,51 +191,50 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
             # for every dimensionality, compute the posterior distribution of s_ljk, s_rjk
             for k in range(D):
                 x_k = Xj[:, k]
-                # # p represent the number of x_ik < mu_jk
-                # p = x_k[x_k < mu[j][k]].shape[0]
-                # # q represent the number of x_ik >= mu_jk, q = n - p
-                # q = x_k[x_k >= mu[j][k]].shape[0]
+                # p represent the number of x_ik < mu_jk
+                p = x_k[x_k < mu[j][k]].shape[0]
+                # q represent the number of x_ik >= mu_jk, q = n - p
+                q = x_k[x_k >= mu[j][k]].shape[0]
                 # x_l represents the data from i to n of x_ik, which x_ik < mu_jk
                 x_l = x_k[x_k < mu[j][k]]
                 # x_r represents the data from i to n of x_ik, which x_ik >= mu_jk
                 x_r = x_k[x_k >= mu[j][k]]
-                cumculative_sum_left_equation = np.squeeze(np.outer((x_l[k] - mu[j][k]), np.transpose(x_l[k] - mu[j][k])))
-                cumculative_sum_right_equation = np.squeeze(np.outer((x_r[k] - mu[j][k]), np.transpose(x_r[k] - mu[j][k])))
+                cumculative_sum_left_equation = np.sum((x_l - mu[j][k]) **2)
+                cumculative_sum_right_equation = np.sum((x_r - mu[j][k]) **2)
 
                 # def Metropolis_Hastings_Sampling_posterior_sljk(s_ljk, s_rjk, nj, beta, w, sum):
                 s_l[j][k] = Metropolis_Hastings_Sampling_posterior_sljk(s_ljk=s_l[j][k], s_rjk=s_r[j][k],
                                                 nj=nj, beta=beta_l[k], w=w_l[k], sum=cumculative_sum_left_equation)
                 s_r[j][k] = Metropolis_Hastings_Sampling_posterior_srjk(s_ljk=s_l[j][k], s_rjk=s_r[j][k],
                                                 nj=nj, beta=beta_r[k], w=w_r[k], sum=cumculative_sum_right_equation)
+        print(s_l)
+        print(s_r)
 
         # compute the unrepresented probability - apply simulated annealing, eq 17 (Rasmussen 2000)
         p_unrep = (alpha / (N - 1.0 + alpha)) * integral_approx(X, lam, r, beta_l, beta_r, w_l, w_r, G, size=Nint)
         p_indicators_prior = np.outer(np.ones(k + 1), p_unrep)
-        # print(p_unrep)
-        # time.sleep(100)
-
 
         # for the represented components, eq 17 (Rasmussen 2000)
         for j in range(M):
             # n-i,j : the number of oberservations, excluding Xi, that are associated with component j
             nij = n[j] - (c == j).astype(int)
-            # print(nij)
+            # print(nj)
             idx = np.argwhere(nij > 0)
             idx = idx.reshape(idx.shape[0])
+            # print("____")
+            # print(idx)
             likelihood_for_associated_data = np.ones(len(idx))
+            # print(likelihood_for_associated_data.shape)
             for i in idx:
-                # print(i)
                 for k in range(D):
-                    # print(k)
                     if X[i][k] < mu[j][k]:
+                        # print(likelihood_for_associated_data[i])
                         likelihood_for_associated_data[i] *= 1 / (np.power(s_l[j][k], -0.5) + np.power(s_r[j][k], -0.5))* \
-                        np.exp(- 0.5 * s_l[j][k] * (X[i][k] - mu[j][k]) ** 2)
+                                     np.exp(- 0.5 * s_l[j][k] * np.power(X[i][k] - mu[j][k], 2))
                     else:
                         likelihood_for_associated_data[i] *= 1 / (np.power(s_l[j][k], -0.5) + np.power(s_r[j][k], -0.5))* \
-                        np.exp(- 0.5 * s_r[j][k] * (X[i][k] - mu[j][k]) ** 2)
-                    # print(likelihood_for_associated_data[i])
+                                    np.exp(- 0.5 * s_r[j][k] * np.power(X[i][k] - mu[j][k], 2))
             p_indicators_prior[j, idx] = nij[idx]/(N - 1.0 + alpha)*likelihood_for_associated_data
-        print(p_indicators_prior)
         # stochastic indicator (we could have a new component)
         c = np.hstack(draw_indicator(p_indicators_prior))
         # print(c)
