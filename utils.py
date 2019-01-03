@@ -33,7 +33,7 @@ def compare_s_ljk(s_ljk, previous_s_ljk, s_rjk, nj, beta, w, sum):
 
 
 def Metropolis_Hastings_Sampling_posterior_sljk(s_ljk, s_rjk, nj, beta, w, sum):
-    n = 5000
+    n = 2500
     x = s_ljk
     vec = []
     vec.append(x)
@@ -77,7 +77,7 @@ def compare_s_rjk(s_rjk, previous_s_rjk, s_ljk, nj, beta, w, sum):
 
 
 def Metropolis_Hastings_Sampling_posterior_srjk(s_ljk, s_rjk, nj, beta, w, sum):
-    n = 5000
+    n = 2500
     x = s_rjk
     vec = []
     vec.append(x)

@@ -133,7 +133,7 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
         precisiony= 1/vary
 
         # the observations belonged to class j
-        Xj = [X[np.where(c==j), :] for j, nj in enumerate(n)][0]
+        Xj = [X[np.where(c==j), :] for j, nj in enumerate(n)]
         mu_cache = mu
         mu = np.zeros((M, D))
         mu_test = np.zeros(D)
@@ -152,8 +152,7 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
                 x_l_sum = np.sum(x_k[x_k < mu_cache[j][k]])
                 # x_r_sum represents the sum from i to n of x_ik, which x_ik >= mu_jk
                 x_r_sum = np.sum(x_k[x_k >= mu_cache[j][k]])
-                s_lj[k] = s_rj[k]
-
+                # s_lj[k] = s_rj[k]
                 r_n = r[k] + p * s_lj[k] + q * s_rj[k]
                 mu_n = (s_lj[k] * x_l_sum + s_rj[k] * x_r_sum + r[k] * lam[k])/r_n
                 mu[j, k] = norm.rvs(mu_n, 1/r_n)
@@ -218,23 +217,27 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
         for j in range(M):
             # n-i,j : the number of oberservations, excluding Xi, that are associated with component j
             nij = n[j] - (c == j).astype(int)
-            # print(nj)
             idx = np.argwhere(nij > 0)
             idx = idx.reshape(idx.shape[0])
-            # print("____")
-            # print(idx)
             likelihood_for_associated_data = np.ones(len(idx))
-            # print(likelihood_for_associated_data.shape)
-            for i in idx:
+            for i in range(len(idx)):
                 for k in range(D):
                     if X[i][k] < mu[j][k]:
-                        # print(likelihood_for_associated_data[i])
                         likelihood_for_associated_data[i] *= 1 / (np.power(s_l[j][k], -0.5) + np.power(s_r[j][k], -0.5))* \
                                      np.exp(- 0.5 * s_l[j][k] * np.power(X[i][k] - mu[j][k], 2))
                     else:
                         likelihood_for_associated_data[i] *= 1 / (np.power(s_l[j][k], -0.5) + np.power(s_r[j][k], -0.5))* \
                                     np.exp(- 0.5 * s_r[j][k] * np.power(X[i][k] - mu[j][k], 2))
             p_indicators_prior[j, idx] = nij[idx]/(N - 1.0 + alpha)*likelihood_for_associated_data
+            # if n[j] ==1:
+            #     print(np.argwhere(nij == 0))
+            #     temp_k = np.argwhere(nij == 0)[0][0]
+            #     print(p_indicators_prior[j][temp_k])
+            #     print(p_unrep[temp_k])
+            #     print(nij[idx]/(N - 1.0 + alpha))
+            #     print(likelihood_for_associated_data)
+            #     print(p_indicators_prior[j])
+            #     time.sleep(100)
         # stochastic indicator (we could have a new component)
         c = np.hstack(draw_indicator(p_indicators_prior))
         # print(c)
@@ -260,9 +263,14 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
         if nij > 0:
             # draw from priors and increment M
             newmu = np.array([np.squeeze(norm.rvs(loc=lam[k], scale=1 / r[k], size=1)) for k in range(D)])
+            print("____")
+            print(newmu)
             news_l = np.array([np.squeeze(draw_gamma(beta_l[k] / 2, 2 / (beta_l[k] * w_l[k]))) for k in range(D)])
             news_r = np.array([np.squeeze(draw_gamma(beta_r[k] / 2, 2 / (beta_r[k] * w_r[k]))) for k in range(D)])
             mu = np.concatenate((mu, np.reshape(newmu, (1, D))))
+            print(mu)
+            print("____")
+
             s_l = np.concatenate((s_l, np.reshape(news_l, (1, D))))
             s_r = np.concatenate((s_r, np.reshape(news_r, (1, D))))
             M = M + 1
@@ -302,7 +310,6 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
         z += 1
         print(M)
         print(n)
-        # time.sleep(10)
         # print(c)
 
     return Samp, X, c, n
