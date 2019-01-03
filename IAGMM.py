@@ -141,6 +141,9 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
         j = 0
         # draw muj from posterior (depends on sj, c, lambda, r), eq 4 (Rasmussen 2000)
         for x, nj, s_lj, s_rj in zip(Xj, n, s_l, s_r):
+            print(x.shape)
+            x = x[0]
+            print(x.shape)
             # for every dimensionality, compute the posterior distribution of mu_jk
             for k in range(D):
                 x_k = x[:, k]
@@ -152,7 +155,7 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
                 x_l_sum = np.sum(x_k[x_k < mu_cache[j][k]])
                 # x_r_sum represents the sum from i to n of x_ik, which x_ik >= mu_jk
                 x_r_sum = np.sum(x_k[x_k >= mu_cache[j][k]])
-                # s_lj[k] = s_rj[k]
+                s_lj[k] = s_rj[k]
                 r_n = r[k] + p * s_lj[k] + q * s_rj[k]
                 mu_n = (s_lj[k] * x_l_sum + s_rj[k] * x_r_sum + r[k] * lam[k])/r_n
                 mu[j, k] = norm.rvs(mu_n, 1/r_n)
