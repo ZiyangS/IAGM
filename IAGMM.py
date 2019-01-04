@@ -50,6 +50,7 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
     """
     # compute some data derived quantities, N is observations number, D is dimensionality number
     N, D = X.shape
+    Nsamples = 150
     muy = np.mean(X, axis=0)
     vary = np.zeros(D)
     for k in range(D):
@@ -121,8 +122,6 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
     z = 1
     oldpcnt = 0
     while z < Nsamples:
-        print("start")
-        print(z)
         # define simulated annealing temperature
         G = max(1.0, float(0.5*Nsamples)/float(z + 1)) if anneal else 1.0
 
@@ -141,9 +140,8 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
         j = 0
         # draw muj from posterior (depends on sj, c, lambda, r), eq 4 (Rasmussen 2000)
         for x, nj, s_lj, s_rj in zip(Xj, n, s_l, s_r):
-            print(x.shape)
             x = x[0]
-            print(x.shape)
+
             # for every dimensionality, compute the posterior distribution of mu_jk
             for k in range(D):
                 x_k = x[:, k]
@@ -155,14 +153,14 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
                 x_l_sum = np.sum(x_k[x_k < mu_cache[j][k]])
                 # x_r_sum represents the sum from i to n of x_ik, which x_ik >= mu_jk
                 x_r_sum = np.sum(x_k[x_k >= mu_cache[j][k]])
-                s_lj[k] = s_rj[k]
+                # s_lj[k] = s_rj[k]
+
                 r_n = r[k] + p * s_lj[k] + q * s_rj[k]
                 mu_n = (s_lj[k] * x_l_sum + s_rj[k] * x_r_sum + r[k] * lam[k])/r_n
                 mu[j, k] = norm.rvs(mu_n, 1/r_n)
                 mu_test[k] = mu_n
                 r_test[k] =  r_n
             j += 1
-        print(mu)
 
         # draw lambda from posterior (depends on mu, M, and r), eq 5 (Rasmussen 2000)
         mu_sum = np.sum(mu, axis=0)
@@ -209,12 +207,10 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
                                                 nj=nj, beta=beta_l[k], w=w_l[k], sum=cumculative_sum_left_equation)
                 s_r[j][k] = Metropolis_Hastings_Sampling_posterior_srjk(s_ljk=s_l[j][k], s_rjk=s_r[j][k],
                                                 nj=nj, beta=beta_r[k], w=w_r[k], sum=cumculative_sum_right_equation)
-        print(s_l)
-        print(s_r)
 
         # compute the unrepresented probability - apply simulated annealing, eq 17 (Rasmussen 2000)
         p_unrep = (alpha / (N - 1.0 + alpha)) * integral_approx(X, lam, r, beta_l, beta_r, w_l, w_r, G, size=Nint)
-        p_indicators_prior = np.outer(np.ones(k + 1), p_unrep)
+        p_indicators_prior = np.outer(np.ones(M + 1), p_unrep)
 
         # for the represented components, eq 17 (Rasmussen 2000)
         for j in range(M):
@@ -232,19 +228,8 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
                         likelihood_for_associated_data[i] *= 1 / (np.power(s_l[j][k], -0.5) + np.power(s_r[j][k], -0.5))* \
                                     np.exp(- 0.5 * s_r[j][k] * np.power(X[i][k] - mu[j][k], 2))
             p_indicators_prior[j, idx] = nij[idx]/(N - 1.0 + alpha)*likelihood_for_associated_data
-            # if n[j] ==1:
-            #     print(np.argwhere(nij == 0))
-            #     temp_k = np.argwhere(nij == 0)[0][0]
-            #     print(p_indicators_prior[j][temp_k])
-            #     print(p_unrep[temp_k])
-            #     print(nij[idx]/(N - 1.0 + alpha))
-            #     print(likelihood_for_associated_data)
-            #     print(p_indicators_prior[j])
-            #     time.sleep(100)
         # stochastic indicator (we could have a new component)
         c = np.hstack(draw_indicator(p_indicators_prior))
-        # print(c)
-
 
         # draw w from posterior (depends on k, beta, D, sj), eq 9 (Rasmussen 2000)
         w_l = np.array([np.squeeze(draw_gamma(0.5 *(M*beta_l[k]+1),\
@@ -266,14 +251,9 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
         if nij > 0:
             # draw from priors and increment M
             newmu = np.array([np.squeeze(norm.rvs(loc=lam[k], scale=1 / r[k], size=1)) for k in range(D)])
-            print("____")
-            print(newmu)
             news_l = np.array([np.squeeze(draw_gamma(beta_l[k] / 2, 2 / (beta_l[k] * w_l[k]))) for k in range(D)])
             news_r = np.array([np.squeeze(draw_gamma(beta_r[k] / 2, 2 / (beta_r[k] * w_r[k]))) for k in range(D)])
             mu = np.concatenate((mu, np.reshape(newmu, (1, D))))
-            print(mu)
-            print("____")
-
             s_l = np.concatenate((s_l, np.reshape(news_l, (1, D))))
             s_r = np.concatenate((s_r, np.reshape(news_r, (1, D))))
             M = M + 1
@@ -311,9 +291,7 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
         newS = copy.deepcopy(S)
         Samp.addsample(newS)
         z += 1
-        print(M)
         print(n)
-        # print(c)
 
     return Samp, X, c, n
 

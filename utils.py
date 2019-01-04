@@ -33,7 +33,7 @@ def compare_s_ljk(s_ljk, previous_s_ljk, s_rjk, nj, beta, w, sum):
 
 
 def Metropolis_Hastings_Sampling_posterior_sljk(s_ljk, s_rjk, nj, beta, w, sum):
-    n = 2500
+    n = 1000
     x = s_ljk
     vec = []
     vec.append(x)
@@ -77,7 +77,7 @@ def compare_s_rjk(s_rjk, previous_s_rjk, s_ljk, nj, beta, w, sum):
 
 
 def Metropolis_Hastings_Sampling_posterior_srjk(s_ljk, s_rjk, nj, beta, w, sum):
-    n = 2500
+    n = 1000
     x = s_rjk
     vec = []
     vec.append(x)
@@ -181,7 +181,6 @@ def Metropolis_Hastings_Sampling_AGD(mu_jk, s_ljk, s_rjk, size, n=10000):
     vec = []
     vec.append(x)
     for i in range(n):
-
         # proposed distribution make sure 25%-40% accept
         # random_walk algorithm, using symmetric Gaussian distribution, so it's simplified to Metropolis algoritm
         # the parameter is mu: the previous state of x and variation
@@ -205,13 +204,13 @@ def integral_approx(X, lam, r, beta_l, beta_r, w_l, w_r, G=1, size=10):
     """
     estimates the integral, eq 17 (Rasmussen 2000)
     """
-    size = 10
+    size = 25
     N, D = X.shape
     temp = np.zeros(len(X))
     i = 0
     while i < size:
         mu = np.array([np.squeeze(norm.rvs(loc=lam[k], scale=1/r[k], size=1)) for k in range(D)])
-        # mu = draw_MVNormal(mean=lam, cov=1/r)
+        mu = draw_MVNormal(mean=lam, cov=1/r)
         s_l = np.array([np.squeeze(draw_gamma(beta_l[k] / 2, 2 / (beta_l[k] * w_l[k]))) for k in range(D)])
         s_r = np.array([np.squeeze(draw_gamma(beta_r[k] / 2, 2 / (beta_r[k] * w_r[k]))) for k in range(D)])
         ini = np.ones(len(X))
@@ -292,6 +291,7 @@ def draw_beta_ars(w, s, M, k, size=1):
     ars = ARS(log_p_beta, log_p_beta_prime, xi=[lb + 15], lb=lb, ub=float("inf"), \
              M=M, k=k, cumculative_sum_equation=cumculative_sum_equation)
     return ars.draw(size)
+
 
 # def draw_gamma_ras(a, theta, size=1):
 #     """
