@@ -35,7 +35,7 @@ class Samples:
     def addsample(self, S):
         return self.sample.append(S)
 
-def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
+def infinte_mixutre_model(X, Nsamples=500, Nint=50, anneal=False):
     """
     infinite asymmetric gaussian distribution(AGD) mixture model
     using Gibbs sampling
@@ -50,7 +50,7 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
     """
     # compute some data derived quantities, N is observations number, D is dimensionality number
     N, D = X.shape
-    Nsamples = 150
+    Nsamples = 200
     muy = np.mean(X, axis=0)
     vary = np.zeros(D)
     for k in range(D):
@@ -161,6 +161,7 @@ def infinte_mixutre_model(X, Nsamples=1000, Nint=50, anneal=False):
                 mu_test[k] = mu_n
                 r_test[k] =  r_n
             j += 1
+        print(mu)
 
         # draw lambda from posterior (depends on mu, M, and r), eq 5 (Rasmussen 2000)
         mu_sum = np.sum(mu, axis=0)

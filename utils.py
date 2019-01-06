@@ -2,15 +2,12 @@ import sys
 import numpy as np
 from scipy.stats import gamma, invgamma, wishart, norm
 from scipy.stats import multivariate_normal as mv_norm
-from numpy.linalg import inv, det, slogdet
 from scipy import special
 from ars import ARS
 import mpmath
 
-
 # the maximum positive integer for use in setting the ARS seed
 maxsize = sys.maxsize
-
 
 # def posterior_distribution_s_ljk(s_ljk, s_rjk, nj, beta, w, sum):
 #     s_ljk = mpmath.mpf(s_ljk)
@@ -19,6 +16,7 @@ maxsize = sys.maxsize
 #         * mpmath.power(s_ljk, (beta/2-1)) \
 #         * mpmath.exp(-0.5*s_ljk*sum) \
 #         * mpmath.exp(-0.5*w*beta*s_ljk)
+
 
 def compare_s_ljk(s_ljk, previous_s_ljk, s_rjk, nj, beta, w, sum):
     s_ljk = mpmath.mpf(s_ljk)
@@ -239,34 +237,6 @@ def log_p_alpha_prime(alpha, k, N):
     return (k - 1.5)/alpha + 0.5/(alpha*alpha) + special.psi(alpha) - special.psi(alpha + N)
 
 
-def log_p_s_ljk(s_ljk, s_rjk, w, beta, N, cumculative_sum_equation):
-    return -N*np.log(np.power(s_ljk, -0.5) + np.power(s_rjk, -0.5)) \
-        - 0.5*s_ljk*cumculative_sum_equation \
-        + (beta/2 - 1)*np.log(s_ljk) \
-        - 0.5*w*beta*s_ljk
-
-
-def log_p_s_ljk_prime(s_ljk, s_rjk, w, beta, N, cumculative_sum_equation):
-    return 0.5*N*np.power(s_ljk, -1.5) / (np.power(s_ljk, -0.5) + np.power(s_rjk, -0.5)) \
-        - 0.5*cumculative_sum_equation \
-        + (beta/2 - 1)/s_ljk \
-        - 0.5*w*beta
-
-
-def log_p_s_rjk(s_rjk, s_ljk, w, beta, N, cumculative_sum_equation):
-    return -N*np.log(np.power(s_ljk, -0.5) + np.power(s_rjk, -0.5)) \
-        - 0.5*s_rjk*cumculative_sum_equation \
-        + (beta/2 - 1)*np.log(s_rjk) \
-        - 0.5*w*beta*s_rjk
-
-
-def log_p_s_rjk_prime(s_rjk, s_ljk,  w, beta, N, cumculative_sum_equation):
-    return 0.5*N*np.power(s_rjk, -1.5) / (np.power(s_ljk, -0.5) + np.power(s_rjk, -0.5)) \
-        - 0.5*cumculative_sum_equation \
-        + (beta/2 - 1)/s_rjk \
-        - 0.5*w*beta
-
-
 def log_p_beta(beta, M, k,cumculative_sum_equation=1):
     return -M*special.gammaln(beta/2) \
         - 0.5/beta \
@@ -339,19 +309,6 @@ def draw_alpha(k, N, size=1):
     Make it robust with an expanding range in case of failure
     """
     ars = ARS(log_p_alpha, log_p_alpha_prime, xi=[0.1, 5], lb=0, ub=np.inf, k=k, N=N)
-    return ars.draw(size)
-
-
-def draw_s_ljk(s_rjk, w, beta, N, cumculative_sum_equation, size=1):
-    lb = 0
-    ars = ARS(log_p_s_ljk, log_p_s_ljk_prime, xi=[lb+0.5], lb=0, ub=lb+10, s_rjk=s_rjk,
-                  w=w, beta=beta, N=N, cumculative_sum_equation=cumculative_sum_equation)
-    return ars.draw(size)
-
-def draw_s_rjk(s_ljk, w, beta, N, cumculative_sum_equation, size=1):
-    lb = 1
-    ars = ARS(log_p_s_rjk, log_p_s_rjk_prime, xi=[lb+5], lb=0, ub=lb+10, s_ljk=s_ljk,
-                  w=w, beta=beta, N=N, cumculative_sum_equation=cumculative_sum_equation)
     return ars.draw(size)
 
 
