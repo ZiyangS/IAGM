@@ -3,8 +3,7 @@ import copy
 import numpy as np
 from numpy.linalg import inv, det, slogdet
 from utils import *
-import mpmath
-from scipy.stats import norm
+
 
 class Sample:
     """Class for defining a single sample"""
@@ -50,7 +49,7 @@ def infinte_mixutre_model(X, Nsamples=500, Nint=50, anneal=False):
     """
     # compute some data derived quantities, N is observations number, D is dimensionality number
     N, D = X.shape
-    Nsamples = 200
+    Nsamples = 100
     muy = np.mean(X, axis=0)
     vary = np.zeros(D)
     for k in range(D):
@@ -78,7 +77,6 @@ def infinte_mixutre_model(X, Nsamples=500, Nint=50, anneal=False):
     # theta parameter change to mean, theta*(1/alpha). So second parameter of Rasmussen's should be 2*theta/a
     beta_l = np.array([np.squeeze(draw_invgamma(0.5, 2)) for d in range(D)])
     beta_r = np.array([np.squeeze(draw_invgamma(0.5, 2)) for d in range(D)])
-
     # draw w from prior
     # w is subject ot Rasmussen's gamma(1, vary) , eq 7 (Rasmussen 2000)
     # which means its subject to standard gamma(0.5, 2*vary)
@@ -89,7 +87,6 @@ def infinte_mixutre_model(X, Nsamples=500, Nint=50, anneal=False):
     # S_ljk, S_rjk is subject to gamma(beta, (w)^(-1)), eq 8 (Rasmussen 2006)
     # which means its subject to standard gamma(0.5*beta, 2/(beta*w))
     # initially, there is only one component, j=1, so the index will set to 0
-
     s_l[0, :] = np.array([np.squeeze(draw_gamma(beta_l[k]/2, 2/(beta_l[k]*w_l[k]))) for k in range(D)])
     s_r[0, :] = np.array([np.squeeze(draw_gamma(beta_r[k]/2, 2/(beta_r[k]*w_r[k]))) for k in range(D)])
 
@@ -122,9 +119,6 @@ def infinte_mixutre_model(X, Nsamples=500, Nint=50, anneal=False):
     z = 1
     oldpcnt = 0
     while z < Nsamples:
-        # define simulated annealing temperature
-        G = max(1.0, float(0.5*Nsamples)/float(z + 1)) if anneal else 1.0
-
         # recompute muy and covy
         muy = np.mean(X, axis=0)
         for k in range(D):
@@ -135,13 +129,10 @@ def infinte_mixutre_model(X, Nsamples=500, Nint=50, anneal=False):
         Xj = [X[np.where(c==j), :] for j, nj in enumerate(n)]
         mu_cache = mu
         mu = np.zeros((M, D))
-        mu_test = np.zeros(D)
-        r_test = np.zeros(D)
         j = 0
         # draw muj from posterior (depends on sj, c, lambda, r), eq 4 (Rasmussen 2000)
         for x, nj, s_lj, s_rj in zip(Xj, n, s_l, s_r):
             x = x[0]
-
             # for every dimensionality, compute the posterior distribution of mu_jk
             for k in range(D):
                 x_k = x[:, k]
@@ -154,26 +145,23 @@ def infinte_mixutre_model(X, Nsamples=500, Nint=50, anneal=False):
                 # x_r_sum represents the sum from i to n of x_ik, which x_ik >= mu_jk
                 x_r_sum = np.sum(x_k[x_k >= mu_cache[j][k]])
                 # s_lj[k] = s_rj[k]
-
                 r_n = r[k] + p * s_lj[k] + q * s_rj[k]
                 mu_n = (s_lj[k] * x_l_sum + s_rj[k] * x_r_sum + r[k] * lam[k])/r_n
-                mu[j, k] = norm.rvs(mu_n, 1/r_n)
-                mu_test[k] = mu_n
-                r_test[k] =  r_n
+                mu[j, k] = draw_normal(mu_n, 1/r_n)
             j += 1
-        print(mu)
 
         # draw lambda from posterior (depends on mu, M, and r), eq 5 (Rasmussen 2000)
         mu_sum = np.sum(mu, axis=0)
         loc_n = np.zeros(D)
         scale_n = np.zeros(D)
         for k in range(D):
-            scale = 1/(precisiony[k] + M * r[k])
+            scale = 1 / (precisiony[k] + M * r[k])
             scale_n[k] = scale
-            loc = scale * (muy[k]*precisiony[k] + r[k]* mu_sum[k])
+            loc = scale * (muy[k] * precisiony[k] + r[k] * mu_sum[k])
             loc_n[k] = loc
-            lam[k] = draw_normal(loc=loc, scale=scale)
+            # lam[k] = draw_normal(loc=loc, scale=scale)
         lam = draw_MVNormal(loc_n, scale_n)
+        # print(lam)
 
         # draw r from posterior (depnds on M, mu, and lambda), eq 5 (Rasmussen 2000)
         temp_para_sum = np.zeros(D)
@@ -182,9 +170,9 @@ def infinte_mixutre_model(X, Nsamples=500, Nint=50, anneal=False):
                 temp_para_sum[k] += np.outer((muj[k] - lam[k]), np.transpose(muj[k] - lam[k]))
         r = np.array([np.squeeze(draw_gamma((M+1)/2, 2/(vary[k] + temp_para_sum[k]))) for k in range(D)])
 
-        # draw alpha from posterior (depends on k, N), eq 15 (Rasmussen 2000)
+        # draw alpha from posterior (depends on number of components M, number of observations N), eq 15 (Rasmussen 2000)
         # Because its not standard form, using ARS to sampling
-        alpha = draw_alpha(k, N)
+        alpha = draw_alpha(M, N)
 
         # draw sj from posterior (depends on mu, c, beta, w), eq 8 (Rasmussen 2000)
         for j, nj in enumerate(n):
@@ -210,7 +198,7 @@ def infinte_mixutre_model(X, Nsamples=500, Nint=50, anneal=False):
                                                 nj=nj, beta=beta_r[k], w=w_r[k], sum=cumculative_sum_right_equation)
 
         # compute the unrepresented probability - apply simulated annealing, eq 17 (Rasmussen 2000)
-        p_unrep = (alpha / (N - 1.0 + alpha)) * integral_approx(X, lam, r, beta_l, beta_r, w_l, w_r, G, size=Nint)
+        p_unrep = (alpha / (N - 1.0 + alpha)) * integral_approx(X, lam, r, beta_l, beta_r, w_l, w_r, )
         p_indicators_prior = np.outer(np.ones(M + 1), p_unrep)
 
         # for the represented components, eq 17 (Rasmussen 2000)
@@ -240,18 +228,16 @@ def infinte_mixutre_model(X, Nsamples=500, Nint=50, anneal=False):
                         2/(vary[k] + beta_r[k] * np.sum(s_r, axis=0)[k])))\
                         for k in range(D)])
 
-        # draw beta from posterior (depends on k, s, w), eq 9 (Rasmussen 2000)
+        # draw beta from posterior (depends on M, s, w), eq 9 (Rasmussen 2000)
         # Because its not standard form, using ARS to sampling.
         beta_l = np.array([draw_beta_ars(w_l, s_l, M, k)[0] for k in range(D)])
         beta_r = np.array([draw_beta_ars(w_l, s_l, M, k)[0] for k in range(D)])
-        # beta_l = np.array([draw_beta(beta_l, w_l, s_l, M, k) for k in range(D)])
-        # beta_r = np.array([draw_beta(beta_r, w_r, s_r, M, k) for k in range(D)])
 
         # sort out based on new stochastic indicators
         nij = np.sum(c == M)        # see if the *new* component has occupancy
         if nij > 0:
             # draw from priors and increment M
-            newmu = np.array([np.squeeze(norm.rvs(loc=lam[k], scale=1 / r[k], size=1)) for k in range(D)])
+            newmu = np.array([np.squeeze(draw_normal(lam[k], 1 / r[k])) for k in range(D)])
             news_l = np.array([np.squeeze(draw_gamma(beta_l[k] / 2, 2 / (beta_l[k] * w_l[k]))) for k in range(D)])
             news_r = np.array([np.squeeze(draw_gamma(beta_r[k] / 2, 2 / (beta_r[k] * w_r[k]))) for k in range(D)])
             mu = np.concatenate((mu, np.reshape(newmu, (1, D))))
@@ -267,6 +253,7 @@ def infinte_mixutre_model(X, Nsamples=500, Nint=50, anneal=False):
 
         # remove unrepresented components
         if Nbad > 0:
+            print(111)
             mu = np.delete(mu, badidx, axis=0)
             s_l = np.delete(s_l, badidx, axis=0)
             s_r = np.delete(s_r, badidx, axis=0)
