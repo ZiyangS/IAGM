@@ -157,22 +157,15 @@ def infinte_mixutre_model(X, Nsamples=500, Nint=50, anneal=False):
         for k in range(D):
             scale = 1 / (precisiony[k] + M * r[k])
             scale_n[k] = scale
-            loc = scale * (muy[k] * precisiony[k] + r[k] * mu_sum[k])
-            loc_n[k] = loc
-            # lam[k] = draw_normal(loc=loc, scale=scale)
+            loc_n[k] = scale * (muy[k] * precisiony[k] + r[k] * mu_sum[k])
         lam = draw_MVNormal(loc_n, scale_n)
-        # print(lam)
 
         # draw r from posterior (depnds on M, mu, and lambda), eq 5 (Rasmussen 2000)
         temp_para_sum = np.zeros(D)
         for k in range(D):
             for muj in mu:
                 temp_para_sum[k] += np.outer((muj[k] - lam[k]), np.transpose(muj[k] - lam[k]))
-        r = np.array([np.squeeze(draw_gamma((M+1)/2, 2/(vary[k] + temp_para_sum[k]))) for k in range(D)])
-
-        # draw alpha from posterior (depends on number of components M, number of observations N), eq 15 (Rasmussen 2000)
-        # Because its not standard form, using ARS to sampling
-        alpha = draw_alpha(M, N)
+        r = np.array([np.squeeze(draw_gamma((M + 1) / 2, 2 / (vary[k] + temp_para_sum[k]))) for k in range(D)])
 
         # draw sj from posterior (depends on mu, c, beta, w), eq 8 (Rasmussen 2000)
         for j, nj in enumerate(n):
@@ -196,6 +189,20 @@ def infinte_mixutre_model(X, Nsamples=500, Nint=50, anneal=False):
                                                 nj=nj, beta=beta_l[k], w=w_l[k], sum=cumculative_sum_left_equation)
                 s_r[j][k] = Metropolis_Hastings_Sampling_posterior_srjk(s_ljk=s_l[j][k], s_rjk=s_r[j][k],
                                                 nj=nj, beta=beta_r[k], w=w_r[k], sum=cumculative_sum_right_equation)
+        # draw w from posterior (depends on k, beta, D, sj), eq 9 (Rasmussen 2000)
+        w_l = np.array([np.squeeze(draw_gamma(0.5 * (M * beta_l[k] + 1), 2 / (vary[k] + beta_l[k] * np.sum(s_l, axis=0)[k]))) \
+             for k in range(D)])
+        w_r = np.array([np.squeeze(draw_gamma(0.5 * (M * beta_r[k] + 1), 2 / (vary[k] + beta_r[k] * np.sum(s_r, axis=0)[k]))) \
+             for k in range(D)])
+
+        # draw beta from posterior (depends on M, s, w), eq 9 (Rasmussen 2000)
+        # Because its not standard form, using ARS to sampling.
+        beta_l = np.array([draw_beta_ars(w_l, s_l, M, k)[0] for k in range(D)])
+        beta_r = np.array([draw_beta_ars(w_r, s_r, M, k)[0] for k in range(D)])
+
+        # draw alpha from posterior (depends on number of components M, number of observations N), eq 15 (Rasmussen 2000)
+        # Because its not standard form, using ARS to sampling
+        alpha = draw_alpha(M, N)
 
         # compute the unrepresented probability - apply simulated annealing, eq 17 (Rasmussen 2000)
         p_unrep = (alpha / (N - 1.0 + alpha)) * integral_approx(X, lam, r, beta_l, beta_r, w_l, w_r, )
@@ -212,26 +219,18 @@ def infinte_mixutre_model(X, Nsamples=500, Nint=50, anneal=False):
                 for k in range(D):
                     if X[i][k] < mu[j][k]:
                         likelihood_for_associated_data[i] *= 1 / (np.power(s_l[j][k], -0.5) + np.power(s_r[j][k], -0.5))* \
-                                     np.exp(- 0.5 * s_l[j][k] * np.power(X[i][k] - mu[j][k], 2))
+                                    np.exp(- 0.5 * s_l[j][k] * np.power(X[i][k] - mu[j][k], 2))
                     else:
                         likelihood_for_associated_data[i] *= 1 / (np.power(s_l[j][k], -0.5) + np.power(s_r[j][k], -0.5))* \
                                     np.exp(- 0.5 * s_r[j][k] * np.power(X[i][k] - mu[j][k], 2))
             p_indicators_prior[j, idx] = nij[idx]/(N - 1.0 + alpha)*likelihood_for_associated_data
+
         # stochastic indicator (we could have a new component)
         c = np.hstack(draw_indicator(p_indicators_prior))
 
-        # draw w from posterior (depends on k, beta, D, sj), eq 9 (Rasmussen 2000)
-        w_l = np.array([np.squeeze(draw_gamma(0.5 *(M*beta_l[k]+1),\
-                        2/(vary[k] + beta_l[k] * np.sum(s_l, axis=0)[k])))\
-                        for k in range(D)])
-        w_r = np.array([np.squeeze(draw_gamma(0.5 *(M*beta_r[k]+1),\
-                        2/(vary[k] + beta_r[k] * np.sum(s_r, axis=0)[k])))\
-                        for k in range(D)])
 
-        # draw beta from posterior (depends on M, s, w), eq 9 (Rasmussen 2000)
-        # Because its not standard form, using ARS to sampling.
-        beta_l = np.array([draw_beta_ars(w_l, s_l, M, k)[0] for k in range(D)])
-        beta_r = np.array([draw_beta_ars(w_l, s_l, M, k)[0] for k in range(D)])
+
+
 
         # sort out based on new stochastic indicators
         nij = np.sum(c == M)        # see if the *new* component has occupancy
@@ -244,6 +243,7 @@ def infinte_mixutre_model(X, Nsamples=500, Nint=50, anneal=False):
             s_l = np.concatenate((s_l, np.reshape(news_l, (1, D))))
             s_r = np.concatenate((s_r, np.reshape(news_r, (1, D))))
             M = M + 1
+
         # find the associated number for every components
         n = np.array([np.sum(c == j) for j in range(M)])
 
@@ -253,7 +253,6 @@ def infinte_mixutre_model(X, Nsamples=500, Nint=50, anneal=False):
 
         # remove unrepresented components
         if Nbad > 0:
-            print(111)
             mu = np.delete(mu, badidx, axis=0)
             s_l = np.delete(s_l, badidx, axis=0)
             s_r = np.delete(s_r, badidx, axis=0)

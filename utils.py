@@ -5,7 +5,7 @@ from scipy.stats import multivariate_normal as mv_norm
 from scipy import special
 from ars import ARS
 import mpmath
-from numba import jit, njit, autojit, vectorize, guvectorize, float64, float32
+from numba import jit
 
 # the maximum positive integer for use in setting the ARS seed
 maxsize = sys.maxsize
@@ -24,14 +24,11 @@ def compare_s_ljk(s_ljk, previous_s_ljk, s_rjk, nj, beta, w, sum):
 
 
 def Metropolis_Hastings_Sampling_posterior_sljk(s_ljk, s_rjk, nj, beta, w, sum):
-    n = 300
+    n = 750
     x = s_ljk
     vec = []
     vec.append(x)
     for i in range(n):
-        # proposed distribution make sure 25%-40% accept
-        # random_walk algorithm, using symmetric Gaussian distribution, so it's simplified to Metropolis algoritm
-        # the parameter is mu: the previous state of x and variation
         candidate = norm.rvs(x, 0.75, 1)[0]
         if candidate <= 0:
             candidate = np.abs(candidate)
@@ -60,14 +57,11 @@ def compare_s_rjk(s_rjk, previous_s_rjk, s_ljk, nj, beta, w, sum):
 
 
 def Metropolis_Hastings_Sampling_posterior_srjk(s_ljk, s_rjk, nj, beta, w, sum):
-    n = 300
+    n = 750
     x = s_rjk
     vec = []
     vec.append(x)
     for i in range(n):
-        # proposed distribution make sure 25%-40% accept
-        # random_walk algorithm, using symmetric Gaussian distribution, so it's simplified to Metropolis algoritm
-        # the parameter is mu: the previous state of x and variation
         candidate = norm.rvs(x, 0.75, 1)[0]
         if candidate <= 0:
             continue
@@ -82,7 +76,7 @@ def Metropolis_Hastings_Sampling_posterior_srjk(s_ljk, s_rjk, nj, beta, w, sum):
     return vec[-1]
 
 
-
+@jit(nogil=True,)
 def Asymmetric_Gassian_Distribution_pdf(x_k, mu_jk, s_ljk, s_rjk):
     y_k = np.zeros(x_k.shape[0])
     for i, xik in enumerate(x_k):
@@ -95,11 +89,10 @@ def Asymmetric_Gassian_Distribution_pdf(x_k, mu_jk, s_ljk, s_rjk):
     return y_k
 
 
-def integral_approx(X, lam, r, beta_l, beta_r, w_l, w_r, G=1, size=15):
+def integral_approx(X, lam, r, beta_l, beta_r, w_l, w_r, size=20):
     """
     estimates the integral, eq 17 (Rasmussen 2000)
     """
-    size = 15
     N, D = X.shape
     temp = np.zeros(len(X))
     i = 0
@@ -110,9 +103,6 @@ def integral_approx(X, lam, r, beta_l, beta_r, w_l, w_r, G=1, size=15):
         s_r = np.array([np.squeeze(draw_gamma(beta_r[k] / 2, 2 / (beta_r[k] * w_r[k]))) for k in range(D)])
         ini = np.ones(len(X))
         for k in range(D):
-            # use metropolis-hastings algorithm to draw sampling from AGD
-            # the size parameter is the required sampling number which is equal to the dataset's number
-            # the n parameter is MH algorithm itering times,because the acceptance rate should be 25%-40%
             temp_para = Asymmetric_Gassian_Distribution_pdf(X[:, k], mu[k], s_l[k], s_r[k])
             ini *= temp_para
         temp += ini
@@ -122,7 +112,7 @@ def integral_approx(X, lam, r, beta_l, beta_r, w_l, w_r, G=1, size=15):
 
 def log_p_alpha(alpha, k, N):
     """
-    the log of eq15 (Rasmussen 2000)
+    the log of eq 15 (Rasmussen 2000)
     """
     return (k - 1.5)*np.log(alpha) - 0.5/alpha + special.gammaln(alpha) - special.gammaln(N + alpha)
 
@@ -135,19 +125,30 @@ def log_p_alpha_prime(alpha, k, N):
 
 
 def log_p_beta(beta, M, cumculative_sum_equation=1):
+    """
+    the log of eq 9 (Rasmussen 2000)
+    """
     return -M*special.gammaln(beta/2) \
         - 0.5/beta \
         + 0.5*(beta*M-3)*np.log(beta/2) \
         + 0.5*beta*cumculative_sum_equation
 
+
 def log_p_beta_prime(beta, M, cumculative_sum_equation=1):
+    """
+    the derivative of the log of eq 9 (Rasmussen 2000)
+    """
     return -M*special.psi(0.5*beta) \
         + 0.5/beta**2 \
         + 0.5*M*np.log(0.5*beta) \
         + (M*beta -3)/beta \
         + 0.5*cumculative_sum_equation
 
+
 def draw_beta_ars(w, s, M, k, size=1):
+    """
+    draw beta from posterior (depends on k, w, sj), eq 9 (Rasmussen 2000), using ARS
+    """
     D = 2
     cumculative_sum_equation = 0
     for sj in s:
@@ -157,6 +158,15 @@ def draw_beta_ars(w, s, M, k, size=1):
     lb = D
     ars = ARS(log_p_beta, log_p_beta_prime, xi=[lb + 15], lb=lb, ub=float("inf"), \
              M=M, cumculative_sum_equation=cumculative_sum_equation)
+    return ars.draw(size)
+
+
+def draw_alpha(k, N, size=1):
+    """
+    draw alpha from posterior (depends on k, N), eq 15 (Rasmussen 2000), using ARS
+    Make it robust with an expanding range in case of failure
+    """
+    ars = ARS(log_p_alpha, log_p_alpha_prime, xi=[0.1, 5], lb=0, ub=np.inf, k=k, N=N)
     return ars.draw(size)
 
 
@@ -198,15 +208,6 @@ def draw_MVNormal(mean=0, cov=1, size=1):
     returns multivariate normally distributed samples
     """
     return mv_norm.rvs(mean=mean, cov=cov, size=size)
-
-
-def draw_alpha(k, N, size=1):
-    """
-    draw alpha from posterior (depends on k, N), eq 15 (Rasmussen 2000), using ARS
-    Make it robust with an expanding range in case of failure
-    """
-    ars = ARS(log_p_alpha, log_p_alpha_prime, xi=[0.1, 5], lb=0, ub=np.inf, k=k, N=N)
-    return ars.draw(size)
 
 
 def draw_indicator(pvec):
